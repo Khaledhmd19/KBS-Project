@@ -1,0 +1,21 @@
+[project]
+name = "nn-design-expert-system"
+version = "0.1.0"
+description = "Neural Network Design Expert System"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "experta>=1.9.4",
+    "customtkinter>=5.0",
+    "frozendict>=2.0",
+]
+
+[tool.uv]
+# experta pins frozendict==1.2 but it's compatible with 2.x on Python 3.10+
+# This override ignores that pin and uses the Python-3.10-compatible version.
+override-dependencies = [
+    "frozendict>=2.0",
+]
+
+[project.scripts]
+start = "main:main"
