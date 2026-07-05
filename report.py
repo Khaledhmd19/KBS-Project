@@ -18,6 +18,7 @@ class ReportBuilder:
         self.regularization     = ""
         self.warning            = ""
         self.checklist          = ""
+        self.explanations       = ""
 
     def clear(self):
         self.problem            = ""
@@ -30,6 +31,7 @@ class ReportBuilder:
         self.regularization     = ""
         self.warning            = ""
         self.checklist          = ""
+        self.explanations       = ""
 
     def add_problem(self, message):
         self.problem = self.problem + "- " + message + "\n"
@@ -61,6 +63,9 @@ class ReportBuilder:
     def add_checklist(self, message):
         self.checklist = self.checklist + "- " + message + "\n"
 
+    def add_explanation(self, rule_name: str, reason: str):
+        self.explanations = self.explanations + f"- [{rule_name}]: {reason}\n"
+
     def get_text(self):
         return (
             "NEURAL NETWORK DESIGN EXPERT REPORT\n"
@@ -75,4 +80,12 @@ class ReportBuilder:
             "[Regularization]\n" + self.regularization + "\n"
             "[Warnings]\n" + self.warning + "\n"
             "[Final Checklist]\n" + self.checklist
+        )
+
+    def get_explanation_text(self):
+        """Return only the explanation trace, formatted as a standalone section."""
+        return (
+            "RULE EXPLANATION TRACE\n"
+            "======================\n\n"
+            + (self.explanations or "No rules were triggered yet.\n")
         )

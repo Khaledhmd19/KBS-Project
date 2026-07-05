@@ -8,6 +8,7 @@ dependencies = [
     "experta>=1.9.4",
     "customtkinter>=5.0",
     "frozendict>=2.0",
+    "pandas>=2.0",
 ]
 
 [tool.uv]

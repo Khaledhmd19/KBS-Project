@@ -57,6 +57,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
             "penalized strongly. Use Mean Absolute Error (MAE) when robustness to outliers "
             "is more important."
         )
+        self.report.add_explanation(
+            "A-problem_regression",
+            "target_kind='continuous' → the target is a real-valued number, so this is a "
+            "regression problem requiring a linear output neuron and a magnitude-sensitive loss."
+        )
 
     @Rule(ProblemFact(target_kind="binary"))
     def problem_binary(self):
@@ -66,6 +71,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
         self.report.add_output_loss(
             "Use 1 output neuron with sigmoid activation. "
             "Use binary cross-entropy as the loss function."
+        )
+        self.report.add_explanation(
+            "A-problem_binary",
+            "target_kind='binary' → exactly two classes. Sigmoid maps logits to [0,1] "
+            "as a single probability; binary cross-entropy penalises confident wrong answers."
         )
 
     @Rule(ProblemFact(target_kind="multiclass"))
@@ -77,6 +87,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
             "Use N output neurons (one per class) with softmax activation. "
             "Use categorical cross-entropy or sparse categorical cross-entropy "
             "depending on the label format."
+        )
+        self.report.add_explanation(
+            "A-problem_multiclass",
+            "target_kind='multiclass' → more than two mutually exclusive classes. "
+            "Softmax normalises logits to a valid probability distribution over all classes."
         )
 
     @Rule(ProblemFact(target_kind="multilabel"))
@@ -90,6 +105,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
             "Use binary cross-entropy as the loss function. "
             "Evaluate with precision, recall, and F1-score."
         )
+        self.report.add_explanation(
+            "A-problem_multilabel",
+            "target_kind='multilabel' → each sample can carry multiple independent labels. "
+            "Independent sigmoids per label treat each label as a separate binary decision."
+        )
 
     # =========================================================================
     # GROUP B — Label Format Rules (4 rules)
@@ -100,6 +120,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
         self.report.add_output_loss(
             "Labels are one-hot encoded: use categorical cross-entropy as the loss function."
         )
+        self.report.add_explanation(
+            "B-label_one_hot",
+            "label_format='one_hot' → labels are already probability vectors; categorical "
+            "cross-entropy compares them directly against the softmax output."
+        )
 
     @Rule(ProblemFact(label_format="integer_class_ids"))
     def label_integer_ids(self):
@@ -107,11 +132,21 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
             "Labels are integer class IDs: use sparse categorical cross-entropy "
             "to avoid converting labels to one-hot vectors manually."
         )
+        self.report.add_explanation(
+            "B-label_integer_ids",
+            "label_format='integer_class_ids' → raw integers (0, 1, 2 …) as labels. "
+            "Sparse cross-entropy accepts integers directly, saving memory and a conversion step."
+        )
 
     @Rule(ProblemFact(label_format="numeric_value"))
     def label_numeric_value(self):
         self.report.add_output_loss(
             "Labels are numeric values: use a regression loss such as MSE, MAE, or Huber loss."
+        )
+        self.report.add_explanation(
+            "B-label_numeric_value",
+            "label_format='numeric_value' → labels are real numbers; regression losses "
+            "measure the distance between predicted and actual value."
         )
 
     @Rule(ProblemFact(label_format="multiple_binary_labels"))
@@ -119,6 +154,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
         self.report.add_output_loss(
             "Labels are multiple independent binary flags: use sigmoid output units "
             "and binary cross-entropy for multi-label learning."
+        )
+        self.report.add_explanation(
+            "B-label_multiple_binary",
+            "label_format='multiple_binary_labels' → each position in the label vector is "
+            "independently 0 or 1; sigmoid + BCE handles each position as its own binary task."
         )
 
     # =========================================================================
@@ -131,6 +171,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
             "Input is tabular data: use a feed-forward fully-connected (dense) neural network. "
             "Start with 2 to 4 hidden layers. Use ReLU activation in hidden layers."
         )
+        self.report.add_explanation(
+            "C-architecture_tabular",
+            "input_data_type='tabular' → structured rows/columns have no spatial or temporal "
+            "order, so a dense MLP is the natural and most effective architecture."
+        )
 
     @Rule(DatasetFact(input_data_type="image"))
     def architecture_image(self):
@@ -139,12 +184,22 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
             "Stack convolution layers, pooling layers, then flatten or use global average "
             "pooling, followed by dense output layers."
         )
+        self.report.add_explanation(
+            "C-architecture_image",
+            "input_data_type='image' → pixels have local spatial structure; CNNs exploit "
+            "translation invariance through shared convolutional filters."
+        )
 
     @Rule(DatasetFact(input_data_type="text"))
     def architecture_text(self):
         self.report.add_architecture(
             "Input is text data: use text vectorization followed by dense layers, "
             "or use embedding layers followed by LSTM, GRU, or a transformer-style encoder."
+        )
+        self.report.add_explanation(
+            "C-architecture_text",
+            "input_data_type='text' → words are discrete tokens with semantic relationships; "
+            "embeddings project them into a continuous space that neural networks can process."
         )
 
     @Rule(DatasetFact(input_data_type="time_series"))
@@ -153,6 +208,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
             "Input is time-series data: use LSTM, GRU, temporal convolution, or 1D CNN. "
             "Preserve the temporal order during train-test splitting."
         )
+        self.report.add_explanation(
+            "C-architecture_time_series",
+            "input_data_type='time_series' → observations are ordered in time; recurrent or "
+            "1D convolutional architectures can capture temporal dependencies."
+        )
 
     @Rule(DatasetFact(input_data_type="mixed"))
     def architecture_mixed(self):
@@ -160,6 +220,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
             "Input is mixed data (multiple modalities): use a multi-input neural network. "
             "Create separate branches for tabular, text, image, or sequence inputs, "
             "then concatenate the learned representations before the output layer."
+        )
+        self.report.add_explanation(
+            "C-architecture_mixed",
+            "input_data_type='mixed' → different modalities require specialised sub-networks; "
+            "their embeddings are merged before the shared output head."
         )
 
     # =========================================================================
@@ -176,6 +241,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
             "Dataset is small: apply early stopping, dropout, or L2 regularization. "
             "Prefer transfer learning for image or text tasks if possible."
         )
+        self.report.add_explanation(
+            "D-dataset_small",
+            "dataset_size='small' (<1 000 samples) → a deep model will memorise training "
+            "examples; a shallow model + regularisation is more likely to generalise."
+        )
 
     @Rule(DatasetFact(dataset_size="medium"))
     def dataset_medium(self):
@@ -185,6 +255,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
         )
         self.report.add_training(
             "Medium dataset: Adam optimizer is a safe and effective default choice."
+        )
+        self.report.add_explanation(
+            "D-dataset_medium",
+            "dataset_size='medium' (1k–100k samples) → enough data for a moderate architecture; "
+            "Adam adapts learning rates per parameter and converges reliably."
         )
 
     @Rule(DatasetFact(dataset_size="large"))
@@ -197,6 +272,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
             "Large dataset: SGD with momentum can be considered for large-scale training "
             "alongside Adam."
         )
+        self.report.add_explanation(
+            "D-dataset_large",
+            "dataset_size='large' (>100k samples) → sufficient data for deeper models; "
+            "SGD+momentum can generalise better than Adam on very large datasets."
+        )
 
     @Rule(DatasetFact(feature_count="high"))
     def feature_count_high(self):
@@ -204,6 +284,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
             "Feature count is high (more than 100 features): apply regularization techniques. "
             "Consider dimensionality reduction or feature selection before training. "
             "Monitor overfitting carefully."
+        )
+        self.report.add_explanation(
+            "D-feature_count_high",
+            "feature_count='high' (>100 features) → high-dimensional input increases the risk "
+            "of the curse of dimensionality; regularisation and feature selection reduce noise."
         )
 
     @Rule(DatasetFact(feature_sample_ratio="risky"))
@@ -216,6 +301,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
             "Risky feature-to-sample ratio: use stronger regularization, prefer a smaller "
             "model, and use a validation set carefully to detect overfitting early."
         )
+        self.report.add_explanation(
+            "D-feature_sample_risky",
+            "feature_sample_ratio='risky' (features ≥10% of samples) → the model can memorise "
+            "the training set because there is insufficient data per feature dimension."
+        )
 
     # =========================================================================
     # GROUP E — Numerical Feature Engineering Rules (8 rules)
@@ -226,6 +316,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
         self.report.add_preprocessing(
             "Numerical features detected: clean and scale them before training. "
             "Neural networks are sensitive to the magnitude of input values."
+        )
+        self.report.add_explanation(
+            "E-numerical_exists",
+            "has_numerical=1 → numerical columns are present; gradient-based optimisation "
+            "converges much faster when inputs share a common scale."
         )
 
     @Rule(
@@ -240,6 +335,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
             "inputs are on comparable ranges. Neural networks train faster and more "
             "reliably when features are normalized."
         )
+        self.report.add_explanation(
+            "E-numerical_scale_different",
+            "has_numerical=1 AND numerical_scale='different' → features with vastly different "
+            "magnitudes cause some weights to update much faster than others, destabilising training."
+        )
 
     @Rule(
         AND(
@@ -251,6 +351,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
         self.report.add_feature_engineering(
             "Numerical distribution is approximately normal: use Standardization "
             "(Z-score scaling) — subtract the mean and divide by the standard deviation."
+        )
+        self.report.add_explanation(
+            "E-numerical_dist_normal",
+            "numerical_distribution='normal' → Z-score standardisation centres the distribution "
+            "at 0 with unit variance, which matches the natural assumptions of many activations."
         )
 
     @Rule(
@@ -264,6 +369,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
             "Numerical distribution is bounded (has known min and max): use Min-Max scaling "
             "to map values into the [0, 1] range."
         )
+        self.report.add_explanation(
+            "E-numerical_dist_bounded",
+            "numerical_distribution='bounded' → known min/max makes Min-Max scaling exact "
+            "and safe; it preserves zero values and the relative spacing of data points."
+        )
 
     @Rule(
         AND(
@@ -275,6 +385,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
         self.report.add_feature_engineering(
             "Numerical distribution is skewed: apply a log transformation or power "
             "transformation (e.g., Box-Cox, Yeo-Johnson) to reduce skewness before scaling."
+        )
+        self.report.add_explanation(
+            "E-numerical_dist_skewed",
+            "numerical_distribution='skewed' → long tails produce extreme input values that "
+            "dominate gradients; a power transform compresses the tail before scaling."
         )
 
     @Rule(
@@ -288,6 +403,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
             "The numerical distribution is unknown. Start with Standardization as a safe "
             "baseline, then compare with Min-Max or robust scaling during experiments."
         )
+        self.report.add_explanation(
+            "E-numerical_dist_unknown",
+            "numerical_distribution='unknown' → with no prior knowledge of the distribution, "
+            "standardisation is the safest starting point; compare against alternatives empirically."
+        )
 
     @Rule(
         AND(
@@ -299,6 +419,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
         self.report.add_feature_engineering(
             "Numerical outliers detected: use Robust Scaling (based on median and IQR) "
             "to reduce the influence of extreme values, or clip/remove outliers before training."
+        )
+        self.report.add_explanation(
+            "E-numerical_outliers",
+            "has_numerical=1 AND numerical_outliers='yes' → extreme values inflate the mean and "
+            "standard deviation; RobustScaler uses the median/IQR which is resistant to outliers."
         )
 
     @Rule(
@@ -314,6 +439,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
             "Also consider binning continuous values into groups such as age ranges or "
             "income levels when a step-wise relationship is expected."
         )
+        self.report.add_explanation(
+            "E-numerical_nonlinear",
+            "nonlinear_relationships='yes' → shallow networks may not capture complex curves; "
+            "polynomial features or binning make the non-linearity explicit for the model."
+        )
 
     # =========================================================================
     # GROUP F — Categorical Feature Engineering Rules (7 rules)
@@ -324,6 +454,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
         self.report.add_preprocessing(
             "Categorical features detected: encode them into numerical representations "
             "before feeding them to a neural network."
+        )
+        self.report.add_explanation(
+            "F-categorical_exists",
+            "has_categorical=1 → neural networks operate on real-valued tensors; categorical "
+            "columns must be converted to numbers before they can be processed."
         )
 
     @Rule(
@@ -336,6 +471,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
         self.report.add_feature_engineering(
             "Categorical features have low cardinality (few unique values): "
             "use one-hot encoding to convert each category into a binary indicator column."
+        )
+        self.report.add_explanation(
+            "F-categorical_low_cardinality",
+            "categorical_cardinality='low' → few unique values means one-hot expansion is small "
+            "and introduces no false ordinal relationship between categories."
         )
 
     @Rule(
@@ -350,6 +490,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
             "use target encoding or learnable embedding layers to avoid extremely "
             "wide one-hot vectors that can slow down training."
         )
+        self.report.add_explanation(
+            "F-categorical_high_cardinality",
+            "categorical_cardinality='high' → one-hot with many categories creates sparse "
+            "high-dimensional inputs; embeddings learn a dense, compact representation instead."
+        )
 
     @Rule(
         AND(
@@ -362,6 +507,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
             "Categorical features are ordinal (categories have a meaningful order): "
             "use ordinal encoding to preserve the rank information "
             "(e.g., low=1, medium=2, high=3)."
+        )
+        self.report.add_explanation(
+            "F-categorical_ordinal",
+            "categorical_order='ordinal' → there is a meaningful rank between categories; "
+            "ordinal encoding preserves this information as a numeric distance."
         )
 
     @Rule(
@@ -376,6 +526,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
             "use one-hot encoding or embedding layers. "
             "Do not use label encoding because it would imply a false ordinal relationship."
         )
+        self.report.add_explanation(
+            "F-categorical_nominal",
+            "categorical_order='nominal' → no rank exists between categories; label encoding "
+            "would imply a numeric order that doesn't exist and mislead the model."
+        )
 
     @Rule(
         AND(
@@ -389,6 +544,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
             "'Other' category to reduce noise and prevent the model from learning "
             "spurious patterns from very few examples."
         )
+        self.report.add_explanation(
+            "F-categorical_rare",
+            "rare_categories='yes' → categories with very few samples give the model almost "
+            "no signal but add parameters; grouping them reduces noise."
+        )
 
     @Rule(
         AND(
@@ -401,6 +561,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
             "Noisy category names detected: standardize spelling, unify capitalization, "
             "and merge duplicates before encoding (e.g., 'male', 'Male', 'MALE' → 'male')."
         )
+        self.report.add_explanation(
+            "F-categorical_noisy",
+            "noisy_categories='yes' → spelling variants are treated as separate categories, "
+            "inflating cardinality and adding noise; normalisation merges duplicates."
+        )
 
     # =========================================================================
     # GROUP G — Date-Time Feature Engineering Rules (4 rules)
@@ -411,6 +576,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
         self.report.add_feature_engineering(
             "Date-time features detected: extract components such as year, month, day, "
             "day of week, hour, minute, and weekend indicator as separate numerical features."
+        )
+        self.report.add_explanation(
+            "G-datetime_exists",
+            "has_datetime=1 → raw datetime strings carry no numeric meaning; extracted "
+            "components expose calendar patterns the model can learn from."
         )
 
     @Rule(
@@ -423,6 +593,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
         self.report.add_feature_engineering(
             "Seasonality detected in date-time data: create explicit seasonal features "
             "such as month, quarter, day of week, and public holiday indicator."
+        )
+        self.report.add_explanation(
+            "G-datetime_seasonality",
+            "seasonality='yes' → periodic patterns tied to the calendar (e.g., holiday peaks) "
+            "need explicit seasonal indicators so the model can learn them."
         )
 
     @Rule(
@@ -441,6 +616,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
             "Ensure the train-validation split respects temporal order — "
             "all training data must come before validation data in time."
         )
+        self.report.add_explanation(
+            "G-datetime_time_order",
+            "time_order='yes' → shuffling would leak future information into training; "
+            "a chronological split ensures the model is evaluated on truly unseen future data."
+        )
 
     @Rule(
         AND(
@@ -454,6 +634,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
             "transformations so the model understands that hour 23 is close to hour 0. "
             "Example: hour_sin = sin(2π × hour / 24), hour_cos = cos(2π × hour / 24)."
         )
+        self.report.add_explanation(
+            "G-datetime_cyclic",
+            "cyclic_time='yes' → numeric encoding of hours treats 23 and 0 as far apart; "
+            "sine/cosine encoding wraps the cycle so proximity is preserved."
+        )
 
     # =========================================================================
     # GROUP H — Text Feature Engineering Rules (6 rules)
@@ -465,6 +650,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
             "Text features detected: clean text before processing — normalize case, "
             "remove punctuation and special characters, tokenize, and convert to a "
             "numerical representation suitable for the chosen model."
+        )
+        self.report.add_explanation(
+            "H-text_exists",
+            "has_text=1 → raw text strings must be tokenised and vectorised before a "
+            "neural network can process them; cleaning reduces vocabulary noise."
         )
 
     @Rule(
@@ -479,6 +669,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
             "embeddings (e.g., GloVe, FastText) with a compact dense network to avoid "
             "overfitting on limited data."
         )
+        self.report.add_explanation(
+            "H-text_small_dataset",
+            "text_dataset_size='small' → training embeddings from scratch on little text leads "
+            "to poor representations; pre-trained embeddings provide a head start."
+        )
 
     @Rule(
         AND(
@@ -492,6 +687,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
             "architecture such as LSTM, GRU, 1D CNN, or a transformer-style encoder to "
             "capture complex linguistic patterns."
         )
+        self.report.add_explanation(
+            "H-text_large_dataset",
+            "text_dataset_size='large' → enough text to train embeddings from scratch or "
+            "fine-tune transformer models to capture domain-specific language patterns."
+        )
 
     @Rule(
         AND(
@@ -504,6 +704,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
             "Word order is important for the text task: use sequence models such as LSTM, "
             "GRU, 1D CNN, or a transformer-style encoder that preserve positional information."
         )
+        self.report.add_explanation(
+            "H-text_word_order",
+            "word_order='yes' → meaning depends on word sequence (e.g., 'cat eats fish' ≠ "
+            "'fish eats cat'); bag-of-words models discard this information."
+        )
 
     @Rule(
         AND(
@@ -515,6 +720,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
         self.report.add_feature_engineering(
             "Text is short (e.g., tweets, titles, labels): TF-IDF, simple embeddings, "
             "or compact dense models often work well and train quickly."
+        )
+        self.report.add_explanation(
+            "H-text_short",
+            "text_length='short' → short sequences have limited context; simple models "
+            "avoid overfitting and are faster to train on short text."
         )
 
     @Rule(
@@ -529,6 +739,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
             "capturing long-range context. Consider truncation, chunking, or hierarchical "
             "encoding strategies to handle length limitations."
         )
+        self.report.add_explanation(
+            "H-text_long",
+            "text_length='long' → RNNs struggle with long-range dependencies; transformers "
+            "or hierarchical models better handle documents with many sentences."
+        )
 
     # =========================================================================
     # GROUP I — Image Feature Engineering Rules (4 rules)
@@ -540,6 +755,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
             "Image features detected: normalize pixel values to the [0, 1] range by "
             "dividing by 255. Resize all images to a consistent spatial resolution "
             "before feeding them to the network."
+        )
+        self.report.add_explanation(
+            "I-image_exists",
+            "has_image=1 → raw pixel values (0–255) have a large magnitude; dividing by 255 "
+            "maps them to [0,1] which stabilises gradient flow through the network."
         )
 
     @Rule(
@@ -554,6 +774,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
             "model (e.g., MobileNet, EfficientNet, ResNet). Freeze the base layers and "
             "fine-tune only the top layers on your data."
         )
+        self.report.add_explanation(
+            "I-image_small_dataset",
+            "image_dataset_size='small' → training a CNN from scratch needs tens of thousands "
+            "of images; pretrained weights provide rich features that transfer across domains."
+        )
 
     @Rule(
         AND(
@@ -565,6 +790,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
         self.report.add_feature_engineering(
             "Image dataset is large: train a CNN from scratch or fine-tune a pretrained "
             "CNN with a lower learning rate, depending on available computational resources."
+        )
+        self.report.add_explanation(
+            "I-image_large_dataset",
+            "image_dataset_size='large' → sufficient images to learn visual features from "
+            "scratch; full fine-tuning of a pretrained model is also viable."
         )
 
     @Rule(
@@ -579,6 +809,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
             "such as horizontal/vertical flipping, rotation, zoom, random cropping, and "
             "brightness or contrast adjustments to improve generalization."
         )
+        self.report.add_explanation(
+            "I-image_augmentation",
+            "image_augmentation='yes' → artificially expanding the training set with random "
+            "transforms reduces overfitting and improves the model's spatial invariance."
+        )
 
     # =========================================================================
     # GROUP J — Data Quality Rules (4 rules)
@@ -590,6 +825,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
             "Missing values detected: handle them before training. Options include "
             "mean/median/mode imputation for numerical features, a dedicated 'missing' "
             "category for categorical features, or row removal when the proportion is small."
+        )
+        self.report.add_explanation(
+            "J-quality_missing_values",
+            "missing_values='yes' → NaN inputs propagate through the network as NaN "
+            "gradients, breaking training; imputation or removal resolves this."
         )
 
     @Rule(QualityFact(class_imbalance="yes"))
@@ -603,6 +843,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
             "oversampling (SMOTE) or undersampling, and monitor recall and F1-score "
             "rather than accuracy."
         )
+        self.report.add_explanation(
+            "J-quality_class_imbalance",
+            "class_imbalance='yes' → a model predicting only the majority class achieves "
+            "high accuracy while being useless; weighted loss forces it to learn minority patterns."
+        )
 
     @Rule(QualityFact(noisy_labels="yes"))
     def quality_noisy_labels(self):
@@ -612,6 +857,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
             "validation loss carefully — a large gap between training and validation loss "
             "may indicate label noise rather than overfitting."
         )
+        self.report.add_explanation(
+            "J-quality_noisy_labels",
+            "noisy_labels='yes' → wrong labels act as adversarial training signal; "
+            "early stopping and regularisation prevent the model from memorising the incorrect labels."
+        )
 
     @Rule(QualityFact(data_leakage="yes"))
     def quality_data_leakage(self):
@@ -620,6 +870,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
             "imputation, encoding) are fitted only on training data and then applied "
             "to validation and test data. Also verify that future information is not "
             "included in any input features."
+        )
+        self.report.add_explanation(
+            "J-quality_data_leakage",
+            "data_leakage='yes' → fitting scalers on the full dataset contaminates validation "
+            "metrics with training information, causing overly optimistic evaluation."
         )
 
     # =========================================================================
@@ -632,12 +887,22 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
             "Regression task: use MAE (Mean Absolute Error), MSE (Mean Squared Error), "
             "RMSE (Root Mean Squared Error), and R-squared to evaluate model performance."
         )
+        self.report.add_explanation(
+            "K-metrics_regression",
+            "target_kind='continuous' → regression metrics measure signed/unsigned distance "
+            "between prediction and ground truth; R² indicates explained variance."
+        )
 
     @Rule(ProblemFact(target_kind="binary"))
     def metrics_binary(self):
         self.report.add_metrics(
             "Binary classification: use Accuracy, Precision, Recall, F1-score, "
             "and ROC-AUC as primary evaluation metrics."
+        )
+        self.report.add_explanation(
+            "K-metrics_binary",
+            "target_kind='binary' → ROC-AUC measures the model's ability to rank positives "
+            "above negatives regardless of threshold; F1 balances precision and recall."
         )
 
     @Rule(ProblemFact(target_kind="multiclass"))
@@ -647,6 +912,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
             "Weighted F1-score, and the Confusion Matrix to evaluate performance "
             "across all classes."
         )
+        self.report.add_explanation(
+            "K-metrics_multiclass",
+            "target_kind='multiclass' → per-class F1 reveals which classes are hard; "
+            "macro-average treats all classes equally regardless of frequency."
+        )
 
     @Rule(ProblemFact(target_kind="multilabel"))
     def metrics_multilabel(self):
@@ -655,6 +925,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
             "Precision, Recall, Hamming Loss, and Subset Accuracy to evaluate "
             "multi-label predictions."
         )
+        self.report.add_explanation(
+            "K-metrics_multilabel",
+            "target_kind='multilabel' → subset accuracy (all labels correct) is very strict; "
+            "Hamming loss measures per-label error rate which is more informative."
+        )
 
     @Rule(QualityFact(class_imbalance="yes"))
     def metrics_imbalanced(self):
@@ -662,6 +937,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
             "Imbalanced classes: do not rely on accuracy alone. Prioritize Recall, "
             "Precision, F1-score, and PR-AUC (Precision-Recall Area Under Curve) "
             "as the main evaluation metrics."
+        )
+        self.report.add_explanation(
+            "K-metrics_imbalanced",
+            "class_imbalance='yes' → accuracy is dominated by the majority class; "
+            "PR-AUC focuses on the minority class performance which is usually the class of interest."
         )
 
     # =========================================================================
@@ -674,6 +954,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
             "Small dataset: use the Adam optimizer as a strong default. "
             "It adapts the learning rate automatically and converges well with limited data."
         )
+        self.report.add_explanation(
+            "L-optimizer_small_dataset",
+            "dataset_size='small' → Adam's per-parameter adaptive rates help it converge "
+            "even when gradients are noisy due to few samples."
+        )
 
     @Rule(DatasetFact(dataset_size="large"))
     def optimizer_large_dataset(self):
@@ -682,6 +967,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
             "training, SGD with momentum and a learning rate schedule can sometimes "
             "achieve better generalization."
         )
+        self.report.add_explanation(
+            "L-optimizer_large_dataset",
+            "dataset_size='large' → with many mini-batches per epoch SGD+momentum can "
+            "escape sharp minima and find flatter, more generalisable solutions."
+        )
 
     @Rule(TrainingFact(unstable_training="yes"))
     def optimizer_unstable(self):
@@ -689,6 +979,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
             "Unstable training detected: reduce the learning rate, add Batch Normalization "
             "layers, verify that input features are properly scaled, and check for "
             "exploding gradients using gradient clipping."
+        )
+        self.report.add_explanation(
+            "L-optimizer_unstable",
+            "unstable_training='yes' → large gradient norms cause loss spikes; clipping, "
+            "lower LR, and BatchNorm normalise activations and stabilise the update magnitude."
         )
 
     # =========================================================================
@@ -706,6 +1001,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
             "Overfitting remedies: add data augmentation where applicable, collect more "
             "training data if possible, and use a simpler architecture with fewer parameters."
         )
+        self.report.add_explanation(
+            "M-symptom_overfitting",
+            "overfitting='yes' → the model has memorised training examples; dropout randomly "
+            "disables neurons during training, forcing the network to learn redundant representations."
+        )
 
     @Rule(TrainingFact(underfitting="yes"))
     def symptom_underfitting(self):
@@ -713,6 +1013,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
             "Underfitting detected: the model is too simple or has not been trained long "
             "enough. Increase model capacity (more layers or neurons), train for more "
             "epochs, reduce excessive regularization, and improve feature representation."
+        )
+        self.report.add_explanation(
+            "M-symptom_underfitting",
+            "underfitting='yes' → both train and val loss are high; the model lacks "
+            "capacity to fit the data — adding layers/neurons or reducing regularisation helps."
         )
 
     @Rule(TrainingFact(unstable_training="yes"))
@@ -722,6 +1027,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
             "use a learning rate scheduler, add Batch Normalization, and ensure all "
             "input features are properly scaled before training."
         )
+        self.report.add_explanation(
+            "M-symptom_unstable",
+            "unstable_training='yes' → oscillating loss often indicates too-high learning rate "
+            "or unscaled inputs; a scheduler decays LR to settle into a stable minimum."
+        )
 
     @Rule(TrainingFact(slow_training="yes"))
     def symptom_slow(self):
@@ -729,6 +1039,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
             "Slow training detected: increase the batch size if memory allows, use "
             "Batch Normalization to allow higher learning rates, reduce unnecessary "
             "features or input dimensions, and use GPU acceleration when available."
+        )
+        self.report.add_explanation(
+            "M-symptom_slow",
+            "slow_training='yes' → small batches under-utilise hardware; larger batches "
+            "and higher LR (enabled by BatchNorm) speed up convergence per wall-clock second."
         )
 
     # =========================================================================
@@ -741,6 +1056,11 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
             "Split tabular data into training, validation, and test sets before training. "
             "Use the test set only for final evaluation — never for hyperparameter tuning."
         )
+        self.report.add_explanation(
+            "N-checklist_tabular_split",
+            "input_data_type='tabular' → a held-out test set is essential to estimate "
+            "real-world performance; using it for tuning creates an optimistic bias."
+        )
 
     @Rule(FeatureFact(has_numerical=1))
     def checklist_scaling(self):
@@ -749,10 +1069,20 @@ class NeuralNetworkDesignEngine(KnowledgeEngine):
             "on the training set, then apply the fitted transformer to the validation and "
             "test sets. Never fit on validation or test data."
         )
+        self.report.add_explanation(
+            "N-checklist_scaling",
+            "has_numerical=1 → fitting a scaler on val/test data leaks their statistics into "
+            "the model; fitting only on train ensures unbiased evaluation."
+        )
 
     @Rule(ProblemFact(target_kind="binary"))
     def checklist_binary_confusion(self):
         self.report.add_checklist(
             "After training a binary classifier, inspect the confusion matrix to understand "
             "the balance between false positives and false negatives for your use case."
+        )
+        self.report.add_explanation(
+            "N-checklist_binary_confusion",
+            "target_kind='binary' → the relative cost of FP vs FN varies by application; "
+            "the confusion matrix reveals which error type the model makes more often."
         )

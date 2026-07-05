@@ -25,6 +25,7 @@ from constants import (
 from report import ReportBuilder
 from engine import NeuralNetworkDesignEngine
 from facts import ProblemFact, DatasetFact, FeatureFact, QualityFact, TrainingFact
+from profiler import profile_dataset
 
 customtkinter.set_appearance_mode("dark")
 customtkinter.set_default_color_theme("blue")
@@ -131,6 +132,16 @@ class NeuralNetworkExpertApp(customtkinter.CTk):
         self.unstable_training_var        = customtkinter.StringVar(value="no")
         self.slow_training_var            = customtkinter.StringVar(value="no")
 
+        # ★ Auto badge text vars — one per profiler-fillable field
+        self.badge_target_kind_var         = customtkinter.StringVar(value="")
+        self.badge_dataset_size_var        = customtkinter.StringVar(value="")
+        self.badge_feature_count_var       = customtkinter.StringVar(value="")
+        self.badge_fsr_var                 = customtkinter.StringVar(value="")
+        self.badge_has_numerical_var       = customtkinter.StringVar(value="")
+        self.badge_num_scale_var           = customtkinter.StringVar(value="")
+        self.badge_num_outliers_var        = customtkinter.StringVar(value="")
+        self.badge_missing_values_var      = customtkinter.StringVar(value="")
+
     # =========================================================================
     # Left Panel
     # =========================================================================
@@ -197,6 +208,16 @@ class NeuralNetworkExpertApp(customtkinter.CTk):
         btn_frame.grid_columnconfigure(0, weight=1)
         btn_frame.grid_columnconfigure(1, weight=1)
         btn_frame.grid_columnconfigure(2, weight=1)
+        btn_frame.grid_columnconfigure(3, weight=1)
+
+        customtkinter.CTkButton(
+            btn_frame, text="Load CSV",
+            font=self.font_bold,
+            fg_color="#4ADE80", hover_color="#22C55E",
+            text_color="#0F172A",
+            corner_radius=8, height=42,
+            command=self.load_csv,
+        ).grid(row=0, column=0, padx=(0, 5), sticky="ew")
 
         customtkinter.CTkButton(
             btn_frame, text=BTN_ANALYZE,
@@ -205,7 +226,7 @@ class NeuralNetworkExpertApp(customtkinter.CTk):
             text_color="#0F172A",
             corner_radius=8, height=42,
             command=self.analyze,
-        ).grid(row=0, column=0, padx=(0, 5), sticky="ew")
+        ).grid(row=0, column=1, padx=(0, 5), sticky="ew")
 
         customtkinter.CTkButton(
             btn_frame, text=BTN_RESET,
@@ -214,7 +235,7 @@ class NeuralNetworkExpertApp(customtkinter.CTk):
             text_color=TEXT_MAIN,
             corner_radius=8, height=42,
             command=self.reset,
-        ).grid(row=0, column=1, padx=(0, 5), sticky="ew")
+        ).grid(row=0, column=2, padx=(0, 5), sticky="ew")
 
         customtkinter.CTkButton(
             btn_frame, text=BTN_COPY,
@@ -223,7 +244,7 @@ class NeuralNetworkExpertApp(customtkinter.CTk):
             text_color=TEXT_MAIN,
             corner_radius=8, height=42,
             command=self.copy_report,
-        ).grid(row=0, column=2, sticky="ew")
+        ).grid(row=0, column=3, sticky="ew")
 
     # =========================================================================
     # Problem Tab
@@ -351,74 +372,94 @@ class NeuralNetworkExpertApp(customtkinter.CTk):
         scroll.pack(fill="both", expand=True, padx=4, pady=4)
 
         # — Dataset Size —
-        customtkinter.CTkLabel(scroll, text="Dataset Size", font=self.font_section, text_color=ACCENT).pack(anchor="w", padx=PAD_INNER, pady=(PAD_INNER, 2))
+        ds_hdr = customtkinter.CTkFrame(scroll, fg_color="transparent")
+        ds_hdr.pack(fill="x", padx=PAD_INNER, pady=(PAD_INNER, 0))
+        customtkinter.CTkLabel(ds_hdr, text="Dataset Size", font=self.font_section, text_color=ACCENT).pack(side="left")
+        self.badge_dataset_size_lbl = customtkinter.CTkLabel(ds_hdr, textvariable=self.badge_dataset_size_var, font=self.font_small, text_color="#4ADE80")
+        self.badge_dataset_size_lbl.pack(side="left", padx=(8, 0))
         customtkinter.CTkLabel(scroll, text="How many total samples (rows) are in your dataset?", font=self.font_small, text_color=TEXT_MUTED).pack(anchor="w", padx=PAD_INNER, pady=(0, 6))
 
         self.radio_ds_small = customtkinter.CTkRadioButton(
             scroll, text="Small  (fewer than 1,000 samples)",
             variable=self.dataset_size_var, value="small",
-            font=self.font_normal, text_color=TEXT_MAIN, fg_color=ACCENT
+            font=self.font_normal, text_color=TEXT_MAIN, fg_color=ACCENT,
+            command=lambda: self.badge_dataset_size_var.set("")
         )
         self.radio_ds_small.pack(anchor="w", padx=PAD_INNER, pady=PAD_WIDGET)
 
         self.radio_ds_medium = customtkinter.CTkRadioButton(
             scroll, text="Medium  (1,000 to 100,000 samples)",
             variable=self.dataset_size_var, value="medium",
-            font=self.font_normal, text_color=TEXT_MAIN, fg_color=ACCENT
+            font=self.font_normal, text_color=TEXT_MAIN, fg_color=ACCENT,
+            command=lambda: self.badge_dataset_size_var.set("")
         )
         self.radio_ds_medium.pack(anchor="w", padx=PAD_INNER, pady=PAD_WIDGET)
 
         self.radio_ds_large = customtkinter.CTkRadioButton(
             scroll, text="Large  (more than 100,000 samples)",
             variable=self.dataset_size_var, value="large",
-            font=self.font_normal, text_color=TEXT_MAIN, fg_color=ACCENT
+            font=self.font_normal, text_color=TEXT_MAIN, fg_color=ACCENT,
+            command=lambda: self.badge_dataset_size_var.set("")
         )
         self.radio_ds_large.pack(anchor="w", padx=PAD_INNER, pady=PAD_WIDGET)
 
         customtkinter.CTkFrame(scroll, height=1, fg_color=PANEL_BG).pack(fill="x", padx=PAD_INNER, pady=PAD_INNER)
 
         # — Feature Count —
-        customtkinter.CTkLabel(scroll, text="Number of Input Features", font=self.font_section, text_color=ACCENT).pack(anchor="w", padx=PAD_INNER, pady=(4, 2))
+        fc_hdr = customtkinter.CTkFrame(scroll, fg_color="transparent")
+        fc_hdr.pack(fill="x", padx=PAD_INNER, pady=(4, 0))
+        customtkinter.CTkLabel(fc_hdr, text="Number of Input Features", font=self.font_section, text_color=ACCENT).pack(side="left")
+        self.badge_feature_count_lbl = customtkinter.CTkLabel(fc_hdr, textvariable=self.badge_feature_count_var, font=self.font_small, text_color="#4ADE80")
+        self.badge_feature_count_lbl.pack(side="left", padx=(8, 0))
         customtkinter.CTkLabel(scroll, text="How many input columns / features does your dataset have?", font=self.font_small, text_color=TEXT_MUTED).pack(anchor="w", padx=PAD_INNER, pady=(0, 6))
 
         self.radio_fc_low = customtkinter.CTkRadioButton(
             scroll, text="Low  (fewer than 20 features)",
             variable=self.feature_count_var, value="low",
-            font=self.font_normal, text_color=TEXT_MAIN, fg_color=ACCENT
+            font=self.font_normal, text_color=TEXT_MAIN, fg_color=ACCENT,
+            command=lambda: self.badge_feature_count_var.set("")
         )
         self.radio_fc_low.pack(anchor="w", padx=PAD_INNER, pady=PAD_WIDGET)
 
         self.radio_fc_medium = customtkinter.CTkRadioButton(
             scroll, text="Medium  (20 to 100 features)",
             variable=self.feature_count_var, value="medium",
-            font=self.font_normal, text_color=TEXT_MAIN, fg_color=ACCENT
+            font=self.font_normal, text_color=TEXT_MAIN, fg_color=ACCENT,
+            command=lambda: self.badge_feature_count_var.set("")
         )
         self.radio_fc_medium.pack(anchor="w", padx=PAD_INNER, pady=PAD_WIDGET)
 
         self.radio_fc_high = customtkinter.CTkRadioButton(
             scroll, text="High  (more than 100 features)",
             variable=self.feature_count_var, value="high",
-            font=self.font_normal, text_color=TEXT_MAIN, fg_color=ACCENT
+            font=self.font_normal, text_color=TEXT_MAIN, fg_color=ACCENT,
+            command=lambda: self.badge_feature_count_var.set("")
         )
         self.radio_fc_high.pack(anchor="w", padx=PAD_INNER, pady=PAD_WIDGET)
 
         customtkinter.CTkFrame(scroll, height=1, fg_color=PANEL_BG).pack(fill="x", padx=PAD_INNER, pady=PAD_INNER)
 
         # — Feature-Sample Ratio —
-        customtkinter.CTkLabel(scroll, text="Feature-to-Sample Risk", font=self.font_section, text_color=ACCENT).pack(anchor="w", padx=PAD_INNER, pady=(4, 2))
+        fsr_hdr = customtkinter.CTkFrame(scroll, fg_color="transparent")
+        fsr_hdr.pack(fill="x", padx=PAD_INNER, pady=(4, 0))
+        customtkinter.CTkLabel(fsr_hdr, text="Feature-to-Sample Risk", font=self.font_section, text_color=ACCENT).pack(side="left")
+        self.badge_fsr_lbl = customtkinter.CTkLabel(fsr_hdr, textvariable=self.badge_fsr_var, font=self.font_small, text_color="#4ADE80")
+        self.badge_fsr_lbl.pack(side="left", padx=(8, 0))
         customtkinter.CTkLabel(scroll, text="Is the number of features high relative to the number of samples?", font=self.font_small, text_color=TEXT_MUTED).pack(anchor="w", padx=PAD_INNER, pady=(0, 6))
 
         self.radio_fsr_safe = customtkinter.CTkRadioButton(
             scroll, text="Safe  (many more samples than features)",
             variable=self.feature_sample_ratio_var, value="safe",
-            font=self.font_normal, text_color=TEXT_MAIN, fg_color=ACCENT
+            font=self.font_normal, text_color=TEXT_MAIN, fg_color=ACCENT,
+            command=lambda: self.badge_fsr_var.set("")
         )
         self.radio_fsr_safe.pack(anchor="w", padx=PAD_INNER, pady=PAD_WIDGET)
 
         self.radio_fsr_risky = customtkinter.CTkRadioButton(
             scroll, text="Risky  (features are many compared to samples)",
             variable=self.feature_sample_ratio_var, value="risky",
-            font=self.font_normal, text_color=TEXT_MAIN, fg_color=ACCENT
+            font=self.font_normal, text_color=TEXT_MAIN, fg_color=ACCENT,
+            command=lambda: self.badge_fsr_var.set("")
         )
         self.radio_fsr_risky.pack(anchor="w", padx=PAD_INNER, pady=(PAD_WIDGET, PAD_INNER))
 
@@ -432,28 +473,39 @@ class NeuralNetworkExpertApp(customtkinter.CTk):
         scroll.pack(fill="both", expand=True, padx=4, pady=4)
 
         # ---- Numerical Features ----
-        customtkinter.CTkLabel(scroll, text="Numerical Features", font=self.font_section, text_color=ACCENT).pack(anchor="w", padx=PAD_INNER, pady=(PAD_INNER, 4))
+        num_hdr = customtkinter.CTkFrame(scroll, fg_color="transparent")
+        num_hdr.pack(fill="x", padx=PAD_INNER, pady=(PAD_INNER, 4))
+        customtkinter.CTkLabel(num_hdr, text="Numerical Features", font=self.font_section, text_color=ACCENT).pack(side="left")
+        self.badge_has_numerical_lbl = customtkinter.CTkLabel(num_hdr, textvariable=self.badge_has_numerical_var, font=self.font_small, text_color="#4ADE80")
+        self.badge_has_numerical_lbl.pack(side="left", padx=(8, 0))
 
         self.check_numerical = customtkinter.CTkCheckBox(
             scroll, text="Dataset contains numerical features",
             variable=self.has_numerical_var,
-            font=self.font_normal, text_color=TEXT_MAIN, fg_color=ACCENT, checkmark_color="#0F172A"
+            font=self.font_normal, text_color=TEXT_MAIN, fg_color=ACCENT, checkmark_color="#0F172A",
+            command=lambda: self.badge_has_numerical_var.set("")
         )
         self.check_numerical.pack(anchor="w", padx=PAD_INNER, pady=PAD_WIDGET)
 
-        customtkinter.CTkLabel(scroll, text="Feature scales:", font=self.font_bold, text_color=TEXT_MAIN).pack(anchor="w", padx=PAD_INNER, pady=(8, 2))
+        scale_row = customtkinter.CTkFrame(scroll, fg_color="transparent")
+        scale_row.pack(fill="x", padx=PAD_INNER, pady=(8, 2))
+        customtkinter.CTkLabel(scale_row, text="Feature scales:", font=self.font_bold, text_color=TEXT_MAIN).pack(side="left")
+        self.badge_num_scale_lbl = customtkinter.CTkLabel(scale_row, textvariable=self.badge_num_scale_var, font=self.font_small, text_color="#4ADE80")
+        self.badge_num_scale_lbl.pack(side="left", padx=(8, 0))
 
         self.radio_scale_similar = customtkinter.CTkRadioButton(
             scroll, text="Similar scales  (all in the same range)",
             variable=self.numerical_scale_var, value="similar",
-            font=self.font_normal, text_color=TEXT_MAIN, fg_color=ACCENT
+            font=self.font_normal, text_color=TEXT_MAIN, fg_color=ACCENT,
+            command=lambda: self.badge_num_scale_var.set("")
         )
         self.radio_scale_similar.pack(anchor="w", padx=PAD_INNER + 12, pady=PAD_WIDGET)
 
         self.radio_scale_different = customtkinter.CTkRadioButton(
             scroll, text="Different scales  (very different magnitudes)",
             variable=self.numerical_scale_var, value="different",
-            font=self.font_normal, text_color=TEXT_MAIN, fg_color=ACCENT
+            font=self.font_normal, text_color=TEXT_MAIN, fg_color=ACCENT,
+            command=lambda: self.badge_num_scale_var.set("")
         )
         self.radio_scale_different.pack(anchor="w", padx=PAD_INNER + 12, pady=PAD_WIDGET)
 
@@ -487,19 +539,25 @@ class NeuralNetworkExpertApp(customtkinter.CTk):
         )
         self.radio_dist_unknown.pack(anchor="w", padx=PAD_INNER + 12, pady=PAD_WIDGET)
 
-        customtkinter.CTkLabel(scroll, text="Outliers:", font=self.font_bold, text_color=TEXT_MAIN).pack(anchor="w", padx=PAD_INNER, pady=(8, 2))
+        out_row = customtkinter.CTkFrame(scroll, fg_color="transparent")
+        out_row.pack(fill="x", padx=PAD_INNER, pady=(8, 2))
+        customtkinter.CTkLabel(out_row, text="Outliers:", font=self.font_bold, text_color=TEXT_MAIN).pack(side="left")
+        self.badge_num_outliers_lbl = customtkinter.CTkLabel(out_row, textvariable=self.badge_num_outliers_var, font=self.font_small, text_color="#4ADE80")
+        self.badge_num_outliers_lbl.pack(side="left", padx=(8, 0))
 
         self.radio_outliers_yes = customtkinter.CTkRadioButton(
             scroll, text="Yes  (extreme values exist)",
             variable=self.numerical_outliers_var, value="yes",
-            font=self.font_normal, text_color=TEXT_MAIN, fg_color=ACCENT
+            font=self.font_normal, text_color=TEXT_MAIN, fg_color=ACCENT,
+            command=lambda: self.badge_num_outliers_var.set("")
         )
         self.radio_outliers_yes.pack(anchor="w", padx=PAD_INNER + 12, pady=PAD_WIDGET)
 
         self.radio_outliers_no = customtkinter.CTkRadioButton(
             scroll, text="No  (no significant outliers)",
             variable=self.numerical_outliers_var, value="no",
-            font=self.font_normal, text_color=TEXT_MAIN, fg_color=ACCENT
+            font=self.font_normal, text_color=TEXT_MAIN, fg_color=ACCENT,
+            command=lambda: self.badge_num_outliers_var.set("")
         )
         self.radio_outliers_no.pack(anchor="w", padx=PAD_INNER + 12, pady=PAD_WIDGET)
 
@@ -948,30 +1006,150 @@ class NeuralNetworkExpertApp(customtkinter.CTk):
     # =========================================================================
 
     def _build_right_panel(self):
+        from codegen import generate_code as _gen
+        self._gen = _gen
+
         self.right_panel = customtkinter.CTkFrame(self, fg_color=PANEL_BG, corner_radius=0)
         self.right_panel.grid(row=0, column=1, sticky="nsew")
         self.right_panel.grid_columnconfigure(0, weight=1)
         self.right_panel.grid_rowconfigure(1, weight=1)
 
-        customtkinter.CTkLabel(
+        # ── Output tab view ────────────────────────────────────────────────────
+        self.output_tabs = customtkinter.CTkTabview(
             self.right_panel,
-            text=REPORT_TITLE,
-            font=self.font_section,
-            text_color=ACCENT
-        ).grid(row=0, column=0, padx=PAD_INNER, pady=(PAD_INNER, 4), sticky="w")
+            fg_color=CARD_BG,
+            segmented_button_fg_color=PANEL_BG,
+            segmented_button_selected_color=ACCENT,
+            segmented_button_selected_hover_color="#2BA8D4",
+            segmented_button_unselected_color=PANEL_BG,
+            segmented_button_unselected_hover_color="#2E3F50",
+            text_color=TEXT_MAIN,
+            corner_radius=8,
+        )
+        self.output_tabs.grid(row=1, column=0, padx=PAD_INNER, pady=(PAD_INNER, 0), sticky="nsew")
+
+        self.output_tabs.add("Report")
+        self.output_tabs.add("Explanation Trace")
+
+        # ── Report tab ─────────────────────────────────────────────────────────
+        report_tab = self.output_tabs.tab("Report")
+        report_tab.grid_columnconfigure(0, weight=1)
+        report_tab.grid_rowconfigure(0, weight=1)
 
         self.report_box = customtkinter.CTkTextbox(
-            self.right_panel,
+            report_tab,
             font=self.font_small,
             fg_color=CARD_BG,
             text_color=TEXT_MAIN,
-            corner_radius=8,
+            corner_radius=0,
             wrap="word",
             activate_scrollbars=True,
         )
-        self.report_box.grid(row=1, column=0, padx=PAD_INNER, pady=(0, PAD_INNER), sticky="nsew")
+        self.report_box.grid(row=0, column=0, padx=0, pady=0, sticky="nsew")
         self.report_box.insert("end", REPORT_HINT)
         self.report_box.configure(state="disabled")
+
+        # ── Explanation Trace tab ──────────────────────────────────────────────
+        expl_tab = self.output_tabs.tab("Explanation Trace")
+        expl_tab.grid_columnconfigure(0, weight=1)
+        expl_tab.grid_rowconfigure(0, weight=1)
+
+        self.expl_box = customtkinter.CTkTextbox(
+            expl_tab,
+            font=self.font_small,
+            fg_color=CARD_BG,
+            text_color="#93C5FD",
+            corner_radius=0,
+            wrap="word",
+            activate_scrollbars=True,
+        )
+        self.expl_box.grid(row=0, column=0, padx=0, pady=0, sticky="nsew")
+        self.expl_box.insert("end", "Run Analyze to see which rules fired and why.")
+        self.expl_box.configure(state="disabled")
+
+        # ── Code generation buttons ────────────────────────────────────────────
+        codegen_frame = customtkinter.CTkFrame(self.right_panel, fg_color=PANEL_BG, corner_radius=0)
+        codegen_frame.grid(row=2, column=0, padx=PAD_INNER, pady=(4, PAD_INNER), sticky="ew")
+        codegen_frame.grid_columnconfigure(0, weight=1)
+        codegen_frame.grid_columnconfigure(1, weight=1)
+
+        customtkinter.CTkLabel(
+            codegen_frame, text="Generate Starter Code:",
+            font=self.font_small, text_color=TEXT_MUTED
+        ).grid(row=0, column=0, columnspan=2, sticky="w", padx=4, pady=(0, 4))
+
+        customtkinter.CTkButton(
+            codegen_frame, text="⚡ PyTorch",
+            font=self.font_bold,
+            fg_color="#EF4444", hover_color="#DC2626",
+            text_color="#FFFFFF",
+            corner_radius=8, height=36,
+            command=lambda: self._generate_code("pytorch"),
+        ).grid(row=1, column=0, padx=(0, 4), sticky="ew")
+
+        customtkinter.CTkButton(
+            codegen_frame, text="🔷 Keras",
+            font=self.font_bold,
+            fg_color="#7C3AED", hover_color="#6D28D9",
+            text_color="#FFFFFF",
+            corner_radius=8, height=36,
+            command=lambda: self._generate_code("keras"),
+        ).grid(row=1, column=1, sticky="ew")
+
+    # =========================================================================
+    # Profiler Integration
+    # =========================================================================
+
+    def load_csv(self):
+        """Open a file dialog, run the profiler, and auto-fill the questionnaire vars."""
+        from tkinter import filedialog, messagebox
+        path = filedialog.askopenfilename(
+            title="Select a CSV dataset",
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+        )
+        # filedialog returns "" when the user cancels — treat empty path as no-op
+        # (uses 'and' short-circuit, not an if statement)
+        path and self._apply_profile(path)
+
+    def _apply_profile(self, path: str):
+        """Run profiler on the given CSV path and populate questionnaire vars."""
+        from tkinter import messagebox
+        try:
+            p = profile_dataset(path)
+        except Exception as exc:
+            from tkinter import messagebox
+            messagebox.showerror("Profiler Error", str(exc))
+            return
+
+        # --- Fill Dataset tab vars and show ★ Auto badges ---
+        self.dataset_size_var.set(p["dataset_size"])
+        self.badge_dataset_size_var.set(f"★ Auto  ({p['_row_count']:,} rows)")
+
+        self.feature_count_var.set(p["feature_count"])
+        self.badge_feature_count_var.set(f"★ Auto  ({p['_col_count']} features)")
+
+        self.feature_sample_ratio_var.set(p["feature_sample_ratio"])
+        self.badge_fsr_var.set("★ Auto")
+
+        # --- Fill Features tab vars and show ★ Auto badges ---
+        self.has_numerical_var.set(p["has_numerical"])
+        self.badge_has_numerical_var.set(f"★ Auto  ({p['_numeric_col_count']} numeric cols)")
+
+        self.numerical_scale_var.set(p["numerical_scale"])
+        self.badge_num_scale_var.set("★ Auto")
+
+        self.numerical_outliers_var.set(p["numerical_outliers"])
+        self.badge_num_outliers_var.set("★ Auto")
+
+        # --- Fill Quality tab vars ---
+        self.missing_values_var.set(p["missing_values"])
+
+        # --- Fill Problem tab: target kind ---
+        self.target_kind_var.set(p["target_kind"])
+        self.badge_target_kind_var.set(f"★ Auto  (target: {p['_target_col']}, {p['_unique_target_values']} unique values)")
+
+        # Jump to the Dataset tab to show the user what changed
+        self.tabview.set("Dataset")
 
     # =========================================================================
     # Callbacks (no conditions, no loops)
@@ -1027,13 +1205,54 @@ class NeuralNetworkExpertApp(customtkinter.CTk):
 
         self.engine.run()
 
+        # ── Populate Report tab ────────────────────────────────────────────────
         self.report_box.configure(state="normal")
         self.report_box.delete("1.0", "end")
         self.report_box.insert("end", self.report.get_text())
         self.report_box.configure(state="disabled")
 
+        # ── Populate Explanation Trace tab ────────────────────────────────────
+        self.expl_box.configure(state="normal")
+        self.expl_box.delete("1.0", "end")
+        self.expl_box.insert("end", self.report.get_explanation_text())
+        self.expl_box.configure(state="disabled")
+
+        # Switch to Report tab automatically
+        self.output_tabs.set("Report")
+
+    def _generate_code(self, framework: str):
+        """Generate a starter script for the given framework and show it in a popup."""
+        from tkinter import Toplevel, Text, Scrollbar, END, RIGHT, Y
+        params = {
+            "target_kind"        : self.target_kind_var.get(),
+            "numerical_scale"    : self.numerical_scale_var.get(),
+            "numerical_outliers" : self.numerical_outliers_var.get(),
+            "overfitting"        : self.overfitting_var.get(),
+            "dataset_size"       : self.dataset_size_var.get(),
+        }
+        code = self._gen(framework, params)
+
+        win = Toplevel(self)
+        win.title(f"Generated {framework.capitalize()} Starter Code")
+        win.geometry("820x640")
+        win.configure(bg="#0F172A")
+
+        txt = Text(
+            win, wrap="none", font=("Courier New", 10),
+            bg="#1E293B", fg="#E2E8F0", insertbackground="white",
+            selectbackground="#334155",
+        )
+        sb_y = Scrollbar(win, orient="vertical",   command=txt.yview)
+        sb_x = Scrollbar(win, orient="horizontal",  command=txt.xview)
+        txt.configure(yscrollcommand=sb_y.set, xscrollcommand=sb_x.set)
+        sb_y.pack(side=RIGHT, fill=Y)
+        sb_x.pack(side="bottom", fill="x")
+        txt.pack(fill="both", expand=True)
+        txt.insert(END, code)
+        txt.configure(state="disabled")
+
     def reset(self):
-        """Restore all variables to their default values. No loops."""
+        """Restore all variables to their default values and clear all badges. No loops."""
         self.target_kind_var.set("binary")
         self.label_format_var.set("integer_class_ids")
         self.input_data_type_var.set("tabular")
@@ -1078,10 +1297,25 @@ class NeuralNetworkExpertApp(customtkinter.CTk):
         self.unstable_training_var.set("no")
         self.slow_training_var.set("no")
 
+        # Clear all ★ Auto badges
+        self.badge_target_kind_var.set("")
+        self.badge_dataset_size_var.set("")
+        self.badge_feature_count_var.set("")
+        self.badge_fsr_var.set("")
+        self.badge_has_numerical_var.set("")
+        self.badge_num_scale_var.set("")
+        self.badge_num_outliers_var.set("")
+        self.badge_missing_values_var.set("")
+
         self.report_box.configure(state="normal")
         self.report_box.delete("1.0", "end")
         self.report_box.insert("end", REPORT_HINT)
         self.report_box.configure(state="disabled")
+
+        self.expl_box.configure(state="normal")
+        self.expl_box.delete("1.0", "end")
+        self.expl_box.insert("end", "Run Analyze to see which rules fired and why.")
+        self.expl_box.configure(state="disabled")
 
     def copy_report(self):
         """Copy the current report text to the system clipboard."""

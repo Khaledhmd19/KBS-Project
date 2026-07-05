@@ -1,0 +1,15 @@
+{
+  "dataset_size": "medium",
+  "feature_count": "low",
+  "feature_sample_ratio": "safe",
+  "has_numerical": 1,
+  "numerical_scale": "different",
+  "numerical_outliers": "yes",
+  "missing_values": "yes",
+  "target_kind": "continuous",
+  "_row_count": 2000,
+  "_col_count": 8,
+  "_numeric_col_count": 6,
+  "_target_col": "sale_price",
+  "_unique_target_values": 1019
+}
