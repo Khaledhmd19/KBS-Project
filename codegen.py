@@ -1,11 +1,10 @@
 # =============================================================================
 # codegen.py
 # Neural Network Code Generator for the Expert System.
-#
-# RESTRICTION: No if / elif / else / for / while / match / case anywhere.
-# Optional code blocks are included via string multiplication (str * int).
-# Framework dispatch is done via dict lookup.
 # =============================================================================
+
+from experta import KnowledgeEngine, Rule, AND
+from facts import FrameworkFact, ProblemFact, DatasetFact, FeatureFact, TrainingFact
 
 
 # =============================================================================
@@ -140,201 +139,259 @@ history = model.fit(
 
 
 # =============================================================================
-# Lookup tables (no if/for anywhere)
+# Code Builder & Experta Engine
 # =============================================================================
 
-# target_kind → (pytorch_loss, pytorch_output_activation, keras_loss,
-#                keras_output_activation, output_size, label_dtype,
-#                squeeze_pred, keras_metrics)
-_TARGET_CONFIG = {
-    "binary": (
-        "nn.BCELoss()",
-        "        x = torch.sigmoid(x)\n",
-        "binary_crossentropy",
-        "sigmoid",
-        "1",
-        "float32",
-        ".squeeze(-1)",
-        '["accuracy"]',
-    ),
-    "multiclass": (
-        "nn.CrossEntropyLoss()",
-        "",   # CrossEntropy expects raw logits — no activation
-        "sparse_categorical_crossentropy",
-        "softmax",
-        "NUM_CLASSES",
-        "long",
-        "",
-        '["accuracy"]',
-    ),
-    "continuous": (
-        "nn.MSELoss()",
-        "",   # linear output — no activation
-        "mse",
-        "linear",
-        "1",
-        "float32",
-        ".squeeze(-1)",
-        '["mae"]',
-    ),
-    "multilabel": (
-        "nn.BCELoss()",
-        "        x = torch.sigmoid(x)\n",
-        "binary_crossentropy",
-        "sigmoid",
-        "NUM_LABELS",
-        "float32",
-        "",
-        '["accuracy"]',
-    ),
-}
-
-# dataset_size → pytorch optimizer class + extra args
-_OPTIMIZER_PYTORCH = {
-    "small":  ("Adam",  ""),
-    "medium": ("Adam",  ""),
-    "large":  ("SGD",   ", momentum=0.9"),
-}
-
-# dataset_size → keras optimizer class + extra args
-_OPTIMIZER_KERAS = {
-    "small":  ("Adam",  ""),
-    "medium": ("Adam",  ""),
-    "large":  ("SGD",   ", momentum=0.9"),
-}
+class CodeBuilder:
+    def __init__(self):
+        # Default scaling: none
+        self.scaler_import = ""
+        self.scaler_fit = "X_scaled = X_train  # no scaling needed\n"
+        
+        # Output layers / targets
+        self.output_size = "1"
+        self.label_dtype = "float32"
+        self.output_activation = ""
+        self.loss_function = "nn.MSELoss()"
+        self.squeeze_pred = ""
+        self.metrics_list = '["mae"]'
+        
+        # Optimizer defaults
+        self.optimizer_class = "Adam"
+        self.optimizer_extra = ""
+        
+        # Dropout / regularization defaults
+        self.dropout_init = ""
+        self.dropout_forward = ""
+        self.dropout_layer = ""
 
 
-# =============================================================================
-# Public generators
-# =============================================================================
+class CodeGenEngine(KnowledgeEngine):
+    def __init__(self, builder: CodeBuilder):
+        super().__init__()
+        self.builder = builder
 
-def generate_pytorch_script(params: dict) -> str:
-    """
-    Generate a PyTorch starter script from the questionnaire params dict.
+    # =========================================================================
+    # OPTIMIZERS
+    # =========================================================================
+    @Rule(DatasetFact(dataset_size="small"))
+    def opt_small(self):
+        self.builder.optimizer_class = "Adam"
+        self.builder.optimizer_extra = ""
 
-    Expected keys (all strings):
-        target_kind        : "binary" | "multiclass" | "continuous" | "multilabel"
-        numerical_scale    : "similar" | "different"
-        numerical_outliers : "yes" | "no"
-        overfitting        : "yes" | "no"
-        dataset_size       : "small" | "medium" | "large"
-    """
-    cfg = _TARGET_CONFIG[params["target_kind"]]
-    (loss_fn, output_act, _, _, out_size, lbl_dtype, squeeze, _) = cfg
+    @Rule(DatasetFact(dataset_size="medium"))
+    def opt_medium(self):
+        self.builder.optimizer_class = "Adam"
+        self.builder.optimizer_extra = ""
 
-    # Optional scaler block — included only when scales differ
-    scale_diff = int(params["numerical_scale"] == "different")
-    scaler_import = "from sklearn.preprocessing import StandardScaler\n" * scale_diff
-    scaler_fit    = (
-        "scaler  = StandardScaler()\n"
-        "X_scaled = scaler.fit_transform(X_train)\n"
-        "X_val_sc = scaler.transform(X_val)\n"
-    ) * scale_diff
-    # Fallback: when no scaling needed, use raw X_train
-    scaler_fit = scaler_fit or "X_scaled = X_train  # no scaling needed\n"
+    @Rule(DatasetFact(dataset_size="large"))
+    def opt_large(self):
+        self.builder.optimizer_class = "SGD"
+        self.builder.optimizer_extra = ", momentum=0.9"
 
-    # Optional robust scaler override when outliers exist
-    outlier = int(params["numerical_outliers"] == "yes")
-    robust_import = "from sklearn.preprocessing import RobustScaler\n" * outlier * scale_diff
-    robust_fit    = (
-        "# Outliers detected — using RobustScaler instead of StandardScaler\n"
-        "scaler  = RobustScaler()\n"
-        "X_scaled = scaler.fit_transform(X_train)\n"
-        "X_val_sc = scaler.transform(X_val)\n"
-    ) * outlier * scale_diff
-    # When outliers exist and scales differ, replace the standard scaler block
-    scaler_import = robust_import or scaler_import
-    scaler_fit    = robust_fit    or scaler_fit
-
-    # Optional dropout block — included only when overfitting is detected
-    overfit = int(params["overfitting"] == "yes")
-    dropout_init    = "        self.dropout = nn.Dropout(0.3)\n" * overfit
-    dropout_forward = "        x = self.dropout(x)\n"           * overfit
-
-    opt_cls, opt_extra = _OPTIMIZER_PYTORCH[params["dataset_size"]]
-
-    return _PYTORCH_TEMPLATE.format(
-        scaler_import    = scaler_import,
-        scaler_fit       = scaler_fit,
-        output_size      = out_size,
-        label_dtype      = lbl_dtype,
-        dropout_init     = dropout_init,
-        dropout_forward  = dropout_forward,
-        output_activation= output_act,
-        loss_function    = loss_fn,
-        optimizer_class  = opt_cls,
-        optimizer_extra  = opt_extra,
-        squeeze_pred     = squeeze,
+    # =========================================================================
+    # SCALING & OUTLIERS (PYTORCH)
+    # =========================================================================
+    @Rule(
+        AND(
+            FrameworkFact(name="pytorch"),
+            FeatureFact(numerical_scale="different"),
+            FeatureFact(numerical_outliers="no")
+        )
     )
+    def scale_pytorch_std(self):
+        self.builder.scaler_import = "from sklearn.preprocessing import StandardScaler\n"
+        self.builder.scaler_fit = (
+            "scaler  = StandardScaler()\n"
+            "X_scaled = scaler.fit_transform(X_train)\n"
+            "X_val_sc = scaler.transform(X_val)\n"
+        )
 
-
-def generate_keras_script(params: dict) -> str:
-    """
-    Generate a Keras / TensorFlow starter script from the questionnaire params dict.
-
-    Expected keys: same as generate_pytorch_script().
-    """
-    cfg = _TARGET_CONFIG[params["target_kind"]]
-    (_, _, loss_fn, output_act, out_size, _, _, metrics) = cfg
-
-    # Optional scaler block — included only when scales differ
-    scale_diff = int(params["numerical_scale"] == "different")
-    scaler_import = "from sklearn.preprocessing import StandardScaler\n" * scale_diff
-    scaler_fit    = (
-        "scaler   = StandardScaler()\n"
-        "X_scaled = scaler.fit_transform(X_train)\n"
-    ) * scale_diff
-    scaler_fit = scaler_fit or "X_scaled = X_train  # no scaling needed\n"
-
-    # Override with robust scaler when outliers exist
-    outlier = int(params["numerical_outliers"] == "yes")
-    robust_import = "from sklearn.preprocessing import RobustScaler\n" * outlier * scale_diff
-    robust_fit    = (
-        "# Outliers detected — using RobustScaler instead of StandardScaler\n"
-        "scaler   = RobustScaler()\n"
-        "X_scaled = scaler.fit_transform(X_train)\n"
-    ) * outlier * scale_diff
-    scaler_import = robust_import or scaler_import
-    scaler_fit    = robust_fit    or scaler_fit
-
-    # Optional dropout layer — included only when overfitting is detected
-    overfit = int(params["overfitting"] == "yes")
-    dropout_layer = '    layers.Dropout(0.3),\n' * overfit
-
-    opt_cls, opt_extra = _OPTIMIZER_KERAS[params["dataset_size"]]
-
-    return _KERAS_TEMPLATE.format(
-        scaler_import    = scaler_import,
-        scaler_fit       = scaler_fit,
-        output_size      = out_size,
-        dropout_layer    = dropout_layer,
-        output_activation= output_act,
-        loss_function    = loss_fn,
-        optimizer_class  = opt_cls,
-        optimizer_extra  = opt_extra,
-        metrics_list     = metrics,
+    @Rule(
+        AND(
+            FrameworkFact(name="pytorch"),
+            FeatureFact(numerical_scale="different"),
+            FeatureFact(numerical_outliers="yes")
+        )
     )
+    def scale_pytorch_robust(self):
+        self.builder.scaler_import = "from sklearn.preprocessing import RobustScaler\n"
+        self.builder.scaler_fit = (
+            "# Outliers detected — using RobustScaler instead of StandardScaler\n"
+            "scaler  = RobustScaler()\n"
+            "X_scaled = scaler.fit_transform(X_train)\n"
+            "X_val_sc = scaler.transform(X_val)\n"
+        )
+
+    # =========================================================================
+    # SCALING & OUTLIERS (KERAS)
+    # =========================================================================
+    @Rule(
+        AND(
+            FrameworkFact(name="keras"),
+            FeatureFact(numerical_scale="different"),
+            FeatureFact(numerical_outliers="no")
+        )
+    )
+    def scale_keras_std(self):
+        self.builder.scaler_import = "from sklearn.preprocessing import StandardScaler\n"
+        self.builder.scaler_fit = (
+            "scaler   = StandardScaler()\n"
+            "X_scaled = scaler.fit_transform(X_train)\n"
+        )
+
+    @Rule(
+        AND(
+            FrameworkFact(name="keras"),
+            FeatureFact(numerical_scale="different"),
+            FeatureFact(numerical_outliers="yes")
+        )
+    )
+    def scale_keras_robust(self):
+        self.builder.scaler_import = "from sklearn.preprocessing import RobustScaler\n"
+        self.builder.scaler_fit = (
+            "# Outliers detected — using RobustScaler instead of StandardScaler\n"
+            "scaler   = RobustScaler()\n"
+            "X_scaled = scaler.fit_transform(X_train)\n"
+        )
+
+    # =========================================================================
+    # DROPOUT / OVERFITTING
+    # =========================================================================
+    @Rule(AND(FrameworkFact(name="pytorch"), TrainingFact(overfitting="yes")))
+    def dropout_pytorch(self):
+        self.builder.dropout_init = "        self.dropout = nn.Dropout(0.3)\n"
+        self.builder.dropout_forward = "        x = self.dropout(x)\n"
+
+    @Rule(AND(FrameworkFact(name="keras"), TrainingFact(overfitting="yes")))
+    def dropout_keras(self):
+        self.builder.dropout_layer = "    layers.Dropout(0.3),\n"
+
+    # =========================================================================
+    # PROBLEM TYPE & TARGETS (PYTORCH)
+    # =========================================================================
+    @Rule(AND(FrameworkFact(name="pytorch"), ProblemFact(target_kind="binary")))
+    def target_pytorch_binary(self):
+        self.builder.loss_function = "nn.BCELoss()"
+        self.builder.output_activation = "        x = torch.sigmoid(x)\n"
+        self.builder.output_size = "1"
+        self.builder.label_dtype = "float32"
+        self.builder.squeeze_pred = ".squeeze(-1)"
+
+    @Rule(AND(FrameworkFact(name="pytorch"), ProblemFact(target_kind="multiclass")))
+    def target_pytorch_multiclass(self):
+        self.builder.loss_function = "nn.CrossEntropyLoss()"
+        self.builder.output_activation = ""
+        self.builder.output_size = "NUM_CLASSES"
+        self.builder.label_dtype = "long"
+        self.builder.squeeze_pred = ""
+
+    @Rule(AND(FrameworkFact(name="pytorch"), ProblemFact(target_kind="continuous")))
+    def target_pytorch_continuous(self):
+        self.builder.loss_function = "nn.MSELoss()"
+        self.builder.output_activation = ""
+        self.builder.output_size = "1"
+        self.builder.label_dtype = "float32"
+        self.builder.squeeze_pred = ".squeeze(-1)"
+
+    @Rule(AND(FrameworkFact(name="pytorch"), ProblemFact(target_kind="multilabel")))
+    def target_pytorch_multilabel(self):
+        self.builder.loss_function = "nn.BCELoss()"
+        self.builder.output_activation = "        x = torch.sigmoid(x)\n"
+        self.builder.output_size = "NUM_LABELS"
+        self.builder.label_dtype = "float32"
+        self.builder.squeeze_pred = ""
+
+    # =========================================================================
+    # PROBLEM TYPE & TARGETS (KERAS)
+    # =========================================================================
+    @Rule(AND(FrameworkFact(name="keras"), ProblemFact(target_kind="binary")))
+    def target_keras_binary(self):
+        self.builder.loss_function = "binary_crossentropy"
+        self.builder.output_activation = "sigmoid"
+        self.builder.output_size = "1"
+        self.builder.metrics_list = '["accuracy"]'
+
+    @Rule(AND(FrameworkFact(name="keras"), ProblemFact(target_kind="multiclass")))
+    def target_keras_multiclass(self):
+        self.builder.loss_function = "sparse_categorical_crossentropy"
+        self.builder.output_activation = "softmax"
+        self.builder.output_size = "NUM_CLASSES"
+        self.builder.metrics_list = '["accuracy"]'
+
+    @Rule(AND(FrameworkFact(name="keras"), ProblemFact(target_kind="continuous")))
+    def target_keras_continuous(self):
+        self.builder.loss_function = "mse"
+        self.builder.output_activation = "linear"
+        self.builder.output_size = "1"
+        self.builder.metrics_list = '["mae"]'
+
+    @Rule(AND(FrameworkFact(name="keras"), ProblemFact(target_kind="multilabel")))
+    def target_keras_multilabel(self):
+        self.builder.loss_function = "binary_crossentropy"
+        self.builder.output_activation = "sigmoid"
+        self.builder.output_size = "NUM_LABELS"
+        self.builder.metrics_list = '["accuracy"]'
 
 
 # =============================================================================
-# Framework dict dispatch — no if/branching
+# Public Generator Dispatch
 # =============================================================================
-
-GENERATORS = {
-    "pytorch": generate_pytorch_script,
-    "keras"  : generate_keras_script,
-}
-
 
 def generate_code(framework: str, params: dict) -> str:
     """
-    Dispatch to the correct generator based on framework name.
+    Generate starter code using Experta rules.
 
     Args:
         framework : "pytorch" | "keras"
-        params    : dict with questionnaire values (see generate_pytorch_script)
+        params    : dict with questionnaire values
 
     Returns:
         A ready-to-run Python script as a string.
     """
-    return GENERATORS[framework](params)
+    builder = CodeBuilder()
+    engine = CodeGenEngine(builder)
+    engine.reset()
+    
+    # Declare the facts derived from params
+    engine.declare(FrameworkFact(name=framework))
+    engine.declare(ProblemFact(target_kind=params.get("target_kind", "binary")))
+    engine.declare(DatasetFact(dataset_size=params.get("dataset_size", "medium")))
+    engine.declare(FeatureFact(
+        numerical_scale=params.get("numerical_scale", "different"),
+        numerical_outliers=params.get("numerical_outliers", "no")
+    ))
+    engine.declare(TrainingFact(overfitting=params.get("overfitting", "no")))
+    
+    engine.run()
+    
+    # Format templates based on the builder fields filled by the engine
+    templates = {
+        "pytorch": lambda: _PYTORCH_TEMPLATE.format(
+            scaler_import    = builder.scaler_import,
+            scaler_fit       = builder.scaler_fit,
+            output_size      = builder.output_size,
+            label_dtype      = builder.label_dtype,
+            dropout_init     = builder.dropout_init,
+            dropout_forward  = builder.dropout_forward,
+            output_activation= builder.output_activation,
+            loss_function    = builder.loss_function,
+            optimizer_class  = builder.optimizer_class,
+            optimizer_extra  = builder.optimizer_extra,
+            squeeze_pred     = builder.squeeze_pred,
+        ),
+        "keras": lambda: _KERAS_TEMPLATE.format(
+            scaler_import    = builder.scaler_import,
+            scaler_fit       = builder.scaler_fit,
+            output_size      = builder.output_size,
+            dropout_layer    = builder.dropout_layer,
+            output_activation= builder.output_activation,
+            loss_function    = builder.loss_function,
+            optimizer_class  = builder.optimizer_class,
+            optimizer_extra  = builder.optimizer_extra,
+            metrics_list     = builder.metrics_list,
+        )
+    }
+    
+    return templates[framework]()
+

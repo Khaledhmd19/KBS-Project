@@ -87,3 +87,14 @@ class TrainingFact(Fact):
         slow_training    : "yes" | "no"
     """
     pass
+
+
+class FrameworkFact(Fact):
+    """
+    Holds the target framework name.
+
+    Fields:
+        name: "pytorch" | "keras"
+    """
+    pass
+

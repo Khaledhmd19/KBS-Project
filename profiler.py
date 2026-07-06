@@ -1,10 +1,6 @@
 # =============================================================================
 # profiler.py
 # Automated Dataset Profiler for the Neural Network Design Expert System.
-#
-# RESTRICTION: No if / elif / else / for / while / match / case anywhere.
-# All decisions are made via tuple-indexing, dict lookups, and vectorized
-# pandas operations only.
 # =============================================================================
 
 import json
